@@ -25,15 +25,9 @@ namespace mph
 {
 	namespace detail
 	{
-		constexpr size_t fnv1a(std::string_view text, size_t seed = 0) noexcept
+		constexpr size_t basic_string_hash(std::string_view text, size_t seed = 0) noexcept
 		{
 			size_t r = seed;
-
-			if constexpr (sizeof(size_t) == 4)
-				r ^= (size_t)UINT32_C(0x811c9dc5);
-			else
-				r ^= (size_t)UINT64_C(0xcbf29ce484222325);
-
 			for (char c : text)
 			{
 				r ^= c;
@@ -41,8 +35,9 @@ namespace mph
 					r *= (size_t)UINT32_C(0x01000193);
 				else
 					r *= (size_t)UINT64_C(0x00000100000001B3);
+				r ^= r >> ((sizeof(size_t) / 2) - 1);
 			}
-
+			r ^= r >> ((sizeof(size_t) / 2) - 1);
 			return r;
 		}
 
@@ -67,7 +62,7 @@ namespace mph
 
 		constexpr size_t random(size_t seed = 0) noexcept
 		{
-			return detail::wellons_mix(detail::fnv1a(__DATE__ "$" __TIME__ "$" __FILE__, seed));
+			return detail::basic_string_hash(__DATE__ "$" __TIME__ "$" __FILE__, seed);
 		}
 	}
 
@@ -78,8 +73,28 @@ namespace mph
 	{
 		constexpr size_t operator()(const T& key) const noexcept
 		{
-			static_assert(std::is_fundamental_v<T> || std::is_pointer_v<T> || std::is_enum_v<T>);
-			return detail::wellons_mix(key);
+			constexpr bool is_integral_like = std::is_fundamental_v<T> || std::is_pointer_v<T> || std::is_enum_v<T>;
+			constexpr bool is_float = std::is_floating_point_v<T>;
+			
+			static_assert (is_integral_like || is_float);
+			
+			if constexpr (is_integral_like)
+			{
+				if constexpr (std::is_enum_v<T>)
+					return detail::wellons_mix((std::underlying_type_t<T>)key);
+				else
+					return detail::wellons_mix(key);
+			}
+			else
+			{
+				constexpr bool is_single_precision = std::is_same_v<T, float>;
+				static_assert (is_single_precision || std::is_same_v<T, double>);
+
+				if constexpr (is_single_precision)
+					return detail::wellons_mix(std::bit_cast<uint32_t>(key));
+				else
+					return detail::wellons_mix(std::bit_cast<uint64_t>(key));
+			}
 		}
 	};
 
@@ -88,7 +103,7 @@ namespace mph
 	{
 		constexpr size_t operator()(std::string_view key) const noexcept
 		{
-			return detail::wellons_mix(detail::fnv1a(key));
+			return detail::basic_string_hash(key);
 		}
 	};
 
@@ -116,7 +131,7 @@ namespace mph
 	class hash_dictionary
 	{
 		static constexpr auto ptr_bits = sizeof(size_t) * 8;
-		static_assert(ptr_bits == 32 || ptr_bits == 64);
+		static_assert (ptr_bits == 32 || ptr_bits == 64);
 
 		static constexpr auto ptr_bits_log2 = ptr_bits == 32 ? 5 : 6;
 
