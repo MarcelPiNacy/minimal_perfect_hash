@@ -25,6 +25,7 @@ namespace mph
 {
 	namespace detail
 	{
+		// Weird FNV-1A variant.
 		constexpr size_t basic_string_hash(std::string_view text, size_t seed = 0) noexcept
 		{
 			size_t r = seed;
@@ -60,14 +61,16 @@ namespace mph
 			return x;
 		}
 
+		// Constexpr PRNG using basic_string_hash.
 		constexpr size_t random(size_t seed = 0) noexcept
 		{
-			return detail::basic_string_hash(__DATE__ "$" __TIME__ "$" __FILE__, seed);
+			return basic_string_hash(__DATE__ "$" __TIME__ "$" __FILE__, seed);
 		}
 	}
 
 
 
+	// Builtin hash function, works for all basic types, enums and pointers.
 	template <typename T>
 	struct default_hasher
 	{
@@ -98,6 +101,7 @@ namespace mph
 		}
 	};
 
+	// Specialization for std::string_view.
 	template <>
 	struct default_hasher<std::string_view>
 	{
@@ -107,6 +111,7 @@ namespace mph
 		}
 	};
 
+	// Builtin subhasher, which computes a new hash based on a key, its hash and the hash offset.
 	template <typename K>
 	struct default_subhasher
 	{
@@ -121,6 +126,7 @@ namespace mph
 
 
 
+	// This class implements both the set and map versions of the hash table. Set V to void to indicate that the desired instantiation is hash_set.
 	template <
 		size_t Size,
 		typename K,
